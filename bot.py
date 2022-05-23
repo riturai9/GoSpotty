@@ -29,19 +29,7 @@ def message(payload):
         print(channel_id, text)
 
 
-@app.route('/getRecommendation', methods=['POST'])
-def get_recommendation():
-    data = request.form
-    genre = data.get('text')
-    channel_id = data.get('channel_id')
-    user_name = data.get('user_name')
-    response = requests.get(f'https://gospotty.herokuapp.com/api/recommendations?genre={genre}')
-    return_data = response.json().get('data').get('items')
-    client.chat_postMessage(channel=channel_id, blocks=get_message_blocks(return_data, user_name, genre))
-    return Response(), 200
-
-
-def get_message_blocks(items, user, genre):
+def get_message_blocks(items, empty_message, user, genre):
     blocks = []
     if len(items) == 0:
         blocks.extend([{
@@ -51,7 +39,7 @@ def get_message_blocks(items, user, genre):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f'Hey {user}, No songs found for genre: {genre} :worried:\n Please try something like: {EXAMPLE_GENRE} :crossed_fingers:'
+                    "text": empty_message
                 }
             }, {
                 "type": "divider"
@@ -64,59 +52,68 @@ def get_message_blocks(items, user, genre):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f'Hey {user}, see the {genre} recommendations below :headphones:'
+                    "text": f'Hey *{user}*, see the {genre} recommendations below :headphones:'
                 }
             }])
         for item in items:
             print(item)
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": item.get('title')
+            blocks.extend([
+                {
+                    "type": "image",
+                    "image_url": item.get('albumArt')[2].get('url'),
+                    "alt_text": "album art"
                 },
-                "accessory": {
-                    "type": "button",
+               {
+                    "type": "section",
                     "text": {
-                        "type": "plain_text",
-                        "text": item.get('title')
+                        "type": "mrkdwn",
+                        "text": f'{get_title(item)}'
                     },
-                    "value": "click_me_123",
-                    "url": item.get('previewUrl'),
-                    "action_id": "button-action"
-                }
-            })
+                    "accessory": {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Preview Song"
+                        },
+                        "value": "click_me_123",
+                        "url": item.get('previewUrl'),
+                        "action_id": "button-action"
+                    }
+                }])
         blocks.append({
             "type": "divider"
         })
     return blocks
 
 
+def get_title(item):
+    return "*" + item.get('title') + "*" + " by " \
+           + ", ".join(item.get('artists')) + " \n - " \
+           + item.get('gcSpotifyUserFullName') + " is listening"
+
+
+@app.route('/getRecommendation', methods=['POST'])
+def get_recommendation():
+    data = request.form
+    genre = data.get('text')
+    channel_id = data.get('channel_id')
+    user_name = data.get('user_name')
+    response = requests.get(f'https://gospotty.herokuapp.com/api/recommendations?genre={genre}')
+    return_data = response.json().get('data').get('items')
+    _message = f'Hey *{user_name}*, No songs found for genre: {genre} :worried:\n Please try something like: {EXAMPLE_GENRE} :crossed_fingers: '
+    client.chat_postMessage(channel=channel_id, blocks=get_message_blocks(return_data, _message, user_name, genre))
+    return Response(), 200
+
+
 @app.route('/hotthisweek', methods=['POST'])
 def hot_this_week():
     data = request.form
     channel_id = data.get('channel_id')
-    client.chat_postMessage(channel=channel_id, blocks=[{
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": f'Hey There'
-        }
-    }])
-    return Response(), 200
-
-
-@app.route('/releasedthismonth', methods=['POST'])
-def released_this_month():
-    data = request.form
-    channel_id = data.get('channel_id')
-    client.chat_postMessage(channel=channel_id, blocks=[{
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": f'Hey There'
-        }
-    }])
+    user_name = data.get('user_name')
+    response = requests.get("https://gospotty.herokuapp.com/api/recommendations/hotthisweek")
+    return_data = response.json().get('data').get('items')
+    _message = f'Hey {user_name}, No songs found for your query :worried:\n'
+    client.chat_postMessage(channel=channel_id, blocks=get_message_blocks(return_data, _message, user_name, ""))
     return Response(), 200
 
 
@@ -124,12 +121,13 @@ def released_this_month():
 def login():
     data = request.form
     channel_id = data.get('channel_id')
+    user_name = data.get('user_name')
     client.chat_postMessage(channel=channel_id, blocks=[
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": "Hello, welcome to the GoSpotty App. To continue please login."
+                "text": f'Hello *{user_name}*,\n welcome to the GoSpotty App. To continue please login'
             }
         },
         {
@@ -147,7 +145,7 @@ def login():
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": "Log into GoSpotty here."
+                "text": "Log into GoSpotty here"
             },
             "accessory": {
                 "type": "button",
